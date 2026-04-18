@@ -4,6 +4,7 @@
 #define JMCP_JLIB_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 /* Output-type values from jsrc/jlib.h. Kept local so we don't need the
  * jsource headers at build time. */
@@ -39,6 +40,24 @@ int  jlib_do(JS jt, const char *sentence);
 void jlib_interrupt(JS jt);
 void jlib_free(JS jt);
 const char *jlib_get_locale(JS jt);
+
+/* JGetM / JSetM: binary array exchange. `jtype` is a J type code (B01=1,
+ * LIT=2, INT=4, FL=8, ...). On get, `jshape` and `jdata` receive pointers
+ * into J's memory (cast as int64_t); valid until the next J call.
+ * Returns 0 on success, else a J error code. */
+int jlib_get_m(JS jt, const char *name,
+               int64_t *jtype, int64_t *jrank,
+               int64_t *jshape, int64_t *jdata);
+
+int jlib_set_m(JS jt, const char *name,
+               int64_t *jtype, int64_t *jrank,
+               int64_t *jshape, int64_t *jdata);
+
+/* J noun-type constants (from jsrc/jtype.h). */
+#define JMCP_JB01  1    /* boolean, 1 byte */
+#define JMCP_JLIT  2    /* character (byte), 1 byte */
+#define JMCP_JINT  4    /* int64, 8 bytes */
+#define JMCP_JFL   8    /* double, 8 bytes */
 
 /* Path to the loaded libj (for diagnostics). NULL before jlib_load. */
 const char *jlib_loaded_path(void);

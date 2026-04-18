@@ -33,7 +33,10 @@ struct session {
     pthread_cond_t  cv_done;
 
     char *pending;    /* sentence to run next; owned; NULL = no job */
-    int   busy;       /* worker currently inside JDo */
+    void (*pending_cb)(struct session *, void *);
+    void *pending_cb_arg;
+
+    int   busy;       /* worker currently inside a job */
     int   shutdown;   /* ask worker to exit */
 
     int   last_ec;
@@ -135,12 +138,18 @@ static void *worker_main(void *arg) {
 
     for (;;) {
         pthread_mutex_lock(&s->mu);
-        while (!s->pending && !s->shutdown)
+        while (!s->pending && !s->pending_cb && !s->shutdown)
             pthread_cond_wait(&s->cv_new_job, &s->mu);
-        if (s->shutdown && !s->pending) { pthread_mutex_unlock(&s->mu); return NULL; }
+        if (s->shutdown && !s->pending && !s->pending_cb) {
+            pthread_mutex_unlock(&s->mu); return NULL;
+        }
 
         char *sent = s->pending;
+        void (*cb)(session *, void *) = s->pending_cb;
+        void *cb_arg = s->pending_cb_arg;
         s->pending = NULL;
+        s->pending_cb = NULL;
+        s->pending_cb_arg = NULL;
         s->busy = 1;
         s->out_len = 0;
         s->err_len = 0;
@@ -148,8 +157,13 @@ static void *worker_main(void *arg) {
         if (s->err_buf) s->err_buf[0] = 0;
         pthread_mutex_unlock(&s->mu);
 
-        int ec = jlib_do(s->jt, sent);
-        free(sent);
+        int ec = 0;
+        if (sent) {
+            ec = jlib_do(s->jt, sent);
+            free(sent);
+        } else if (cb) {
+            cb(s, cb_arg);
+        }
 
         pthread_mutex_lock(&s->mu);
         s->last_ec = ec;
@@ -391,6 +405,20 @@ void session_break(session *s) {
     if (!s) return;
     jlib_interrupt(s->jt);
 }
+
+void session_run_on_worker(session *s, void (*fn)(session *, void *), void *arg) {
+    pthread_mutex_lock(&s->mu);
+    while (s->busy || s->pending || s->pending_cb)
+        pthread_cond_wait(&s->cv_done, &s->mu);
+    s->pending_cb = fn;
+    s->pending_cb_arg = arg;
+    pthread_cond_signal(&s->cv_new_job);
+    while (s->busy || s->pending_cb)
+        pthread_cond_wait(&s->cv_done, &s->mu);
+    pthread_mutex_unlock(&s->mu);
+}
+
+void *session_jt(session *s) { return s ? s->jt : NULL; }
 
 const char *session_name(const session *s)  { return s ? s->name : NULL; }
 int session_is_sandbox(const session *s)    { return s ? s->sandbox : 0; }

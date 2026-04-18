@@ -48,6 +48,15 @@ int session_eval(session *s, const char *sentence, int timeout_ms,
 /* Non-blocking interrupt of a running sentence. */
 void session_break(session *s);
 
+/* Run `fn(s, arg)` synchronously on the session's worker thread. Blocks
+ * until the callback returns. Used for libj calls (JGetM, JSetM, ...) that
+ * must execute on the same thread as JInit/JDo. */
+void session_run_on_worker(session *s, void (*fn)(session *s, void *arg), void *arg);
+
+/* Accessor for the session's J instance handle. Valid only from inside a
+ * session_run_on_worker callback. */
+void *session_jt(session *s);
+
 /* Accessors. */
 const char *session_name(const session *s);
 int session_is_sandbox(const session *s);

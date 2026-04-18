@@ -39,6 +39,8 @@ typedef int  (*JDo_t)(JS, const char *);
 typedef void (*JInterrupt_t)(JS);
 typedef void (*JFree_t)(JS);
 typedef const char *(*JGetLocale_t)(JS);
+typedef int  (*JGetM_t)(JS, const char *, int64_t *, int64_t *, int64_t *, int64_t *);
+typedef int  (*JSetM_t)(JS, const char *, int64_t *, int64_t *, int64_t *, int64_t *);
 
 static void *handle = NULL;
 static char  loaded_path[4096];
@@ -49,6 +51,8 @@ static JDo_t         p_JDo;
 static JInterrupt_t  p_JInterrupt;
 static JFree_t       p_JFree;
 static JGetLocale_t  p_JGetLocale;
+static JGetM_t       p_JGetM;
+static JSetM_t       p_JSetM;
 
 static int resolve(const char *name, void **slot, const char **err) {
     void *sym = dl_sym(handle, name);
@@ -129,6 +133,8 @@ int jlib_load(const char *libpath, const char **err) {
     if (resolve("JInterrupt", (void **)&p_JInterrupt, err) < 0) return -1;
     if (resolve("JFree",      (void **)&p_JFree,      err) < 0) return -1;
     if (resolve("JGetLocale", (void **)&p_JGetLocale, err) < 0) return -1;
+    if (resolve("JGetM",      (void **)&p_JGetM,      err) < 0) return -1;
+    if (resolve("JSetM",      (void **)&p_JSetM,      err) < 0) return -1;
 
     jlog("libj loaded: %s", loaded_path);
     return 0;
@@ -164,6 +170,18 @@ void jlib_free(JS jt) {
 
 const char *jlib_get_locale(JS jt) {
     return p_JGetLocale(jt);
+}
+
+int jlib_get_m(JS jt, const char *name,
+               int64_t *jtype, int64_t *jrank,
+               int64_t *jshape, int64_t *jdata) {
+    return p_JGetM(jt, name, jtype, jrank, jshape, jdata);
+}
+
+int jlib_set_m(JS jt, const char *name,
+               int64_t *jtype, int64_t *jrank,
+               int64_t *jshape, int64_t *jdata) {
+    return p_JSetM(jt, name, jtype, jrank, jshape, jdata);
 }
 
 const char *jlib_loaded_path(void) {
