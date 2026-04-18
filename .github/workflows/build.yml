@@ -8,6 +8,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  # Opt JS actions (checkout, upload-artifact, ...) onto Node 24 ahead of the
+  # June 2026 deprecation. Remove once the actions we use ship natively on 24.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   linux:
     runs-on: ubuntu-latest
