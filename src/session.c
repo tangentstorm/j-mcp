@@ -163,7 +163,7 @@ session *session_create(const char *name, int sandbox, const char *profile_path,
     pthread_cond_init(&s->cv_new_job, NULL);
     pthread_cond_init(&s->cv_done, NULL);
 
-    s->jt = jlib_new(j_output_cb, j_wd_cb, j_input_cb, JMCP_SMCON | JMCP_SMOPTMTH);
+    s->jt = jlib_new(j_output_cb, j_wd_cb, j_input_cb, JMCP_SMCON);
     if (!s->jt) { session_free(s); *err = "JInit failed"; return NULL; }
 
     /* Register BEFORE starting the worker so callbacks can find us. */
