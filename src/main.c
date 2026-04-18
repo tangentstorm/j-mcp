@@ -17,7 +17,7 @@ static void usage(const char *prog) {
 }
 
 int main(int argc, char **argv) {
-    const char *libj_path = getenv("JMCP_LIBJ");
+    const char *libj_path = NULL;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--libj") && i + 1 < argc) { libj_path = argv[++i]; }

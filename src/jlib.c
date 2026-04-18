@@ -43,19 +43,15 @@ int jlib_load(const char *libpath, const char **err) {
 
     /* Search order:
      *   1. explicit libpath (from --libj)
-     *   2. $JMCP_LIBJ
-     *   3. $JHOME/libj.so   (conventional in packaged J distributions)
-     *   4. sibling of our executable (jconsole-style)
-     *   5. bare "libj.so"   (LD_LIBRARY_PATH + system paths)
+     *   2. $JHOME/libj.so   (J's conventional install-root variable)
+     *   3. sibling of our executable (jconsole-style)
+     *   4. bare "libj.so"   (LD_LIBRARY_PATH + system paths)
      */
-    const char *candidates[6] = {0};
+    const char *candidates[5] = {0};
     int nc = 0;
     char jhome_buf[4096], exe_buf[4096];
 
     if (libpath && *libpath) candidates[nc++] = libpath;
-
-    const char *env = getenv("JMCP_LIBJ");
-    if (env && *env) candidates[nc++] = env;
 
     const char *jhome = getenv("JHOME");
     if (jhome && *jhome) {

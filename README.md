@@ -48,11 +48,10 @@ Produces `build/j-mcp`.
 The server searches for libj in this order:
 
 1. `--libj <path>` command-line flag
-2. `$JMCP_LIBJ` environment variable
-3. `$JHOME/libj.so` — J's conventional install-root variable, set by most
+2. `$JHOME/libj.so` — J's conventional install-root variable, set by most
    packaged distributions
-4. A `libj.so` sibling of the `j-mcp` binary (jconsole's own discovery rule)
-5. Bare `libj.so` via `LD_LIBRARY_PATH` and the system linker search path
+3. A `libj.so` sibling of the `j-mcp` binary (jconsole's own discovery rule)
+4. Bare `libj.so` via `LD_LIBRARY_PATH` and the system linker search path
 
 ## Transport
 
