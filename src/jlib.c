@@ -10,7 +10,13 @@
   #define WIN32_LEAN_AND_MEAN
   #include <windows.h>
   #define JDLL_NAME "j.dll"
-  static void *dl_open(const char *p) { return (void *)LoadLibraryA(p); }
+  /* LOAD_WITH_ALTERED_SEARCH_PATH: resolve the DLL's own dependencies
+   * starting from its directory. Without this, j.dll loads but its
+   * siblings (jpcre2.dll, libomp, etc.) can't be found and the load fails
+   * with a misleading "module could not be found". */
+  static void *dl_open(const char *p) {
+    return (void *)LoadLibraryExA(p, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+  }
   static void *dl_sym(void *h, const char *s) { return (void *)GetProcAddress((HMODULE)h, s); }
   static const char *dl_err(void) {
     static char buf[256];
@@ -110,8 +116,10 @@ int jlib_load(const char *libpath, const char **err) {
 
     candidates[nc++] = JDLL_NAME;
 
-    static char last_err[512];
+    /* Accumulate all failures so the user can see every path we tried. */
+    static char last_err[2048];
     last_err[0] = 0;
+    size_t elen = 0;
     for (int i = 0; i < nc; i++) {
         void *h = dl_open(candidates[i]);
         if (h) {
@@ -119,8 +127,11 @@ int jlib_load(const char *libpath, const char **err) {
             snprintf(loaded_path, sizeof loaded_path, "%s", candidates[i]);
             break;
         }
-        snprintf(last_err, sizeof last_err, "dlopen %s failed: %s",
-                 candidates[i], dl_err());
+        int n = snprintf(last_err + elen, sizeof last_err - elen,
+                         "%s[%s: %s]", elen ? "; " : "",
+                         candidates[i], dl_err());
+        if (n > 0) elen += (size_t)n;
+        if (elen >= sizeof last_err) elen = sizeof last_err - 1;
     }
     if (!handle) {
         *err = last_err[0] ? last_err : "dlopen failed";

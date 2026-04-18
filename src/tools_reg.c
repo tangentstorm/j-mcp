@@ -100,7 +100,7 @@ static int install_verb(const char *session_name, const char *name,
 
 /* ---------- dynamic-tool handler ---------- */
 
-static __thread char disp_errbuf[512];
+static char disp_errbuf[512];
 
 static json *dispatch_j_verb(const json *args, void *ud, const char **err) {
     jtool *t = ud;
