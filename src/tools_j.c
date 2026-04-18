@@ -48,7 +48,8 @@ static json *eval_result_to_json(const eval_result *r) {
 
 /* ---------- j.session.create ---------- */
 
-static json *tool_session_create(const json *args, const char **err) {
+static json *tool_session_create(const json *args, void *userdata, const char **err) {
+    (void)userdata;
     const char *name = req_str(args, "name", err);
     if (!name) return NULL;
     int sandbox = json_bool(json_obj_get(args, "sandbox"), 0);
@@ -75,7 +76,8 @@ static const char SCHEMA_CREATE[] =
 
 /* ---------- j.session.list ---------- */
 
-static json *tool_session_list(const json *args, const char **err) {
+static json *tool_session_list(const json *args, void *userdata, const char **err) {
+    (void)userdata;
     (void)args; (void)err;
     json *o = json_new_obj();
     json_obj_set(o, "sessions", session_list_json());
@@ -86,7 +88,8 @@ static const char SCHEMA_EMPTY[] = "{\"type\":\"object\",\"properties\":{}}";
 
 /* ---------- j.session.terminate ---------- */
 
-static json *tool_session_terminate(const json *args, const char **err) {
+static json *tool_session_terminate(const json *args, void *userdata, const char **err) {
+    (void)userdata;
     const char *name = req_str(args, "name", err);
     if (!name) return NULL;
     if (!session_lookup(name)) { *err = "no such session"; return NULL; }
@@ -102,7 +105,8 @@ static const char SCHEMA_NAME_ONLY[] =
 
 /* ---------- j.eval ---------- */
 
-static json *tool_eval(const json *args, const char **err) {
+static json *tool_eval(const json *args, void *userdata, const char **err) {
+    (void)userdata;
     const char *name = req_str(args, "name", err);
     if (!name) return NULL;
     const char *sentence = req_str(args, "sentence", err);
@@ -133,7 +137,8 @@ static const char SCHEMA_EVAL[] =
 
 /* ---------- j.parse ---------- */
 
-static json *tool_parse(const json *args, const char **err) {
+static json *tool_parse(const json *args, void *userdata, const char **err) {
+    (void)userdata;
     const char *name = req_str(args, "name", err);
     if (!name) return NULL;
     const char *sentence = req_str(args, "sentence", err);
@@ -166,9 +171,34 @@ static const char SCHEMA_PARSE[] =
        "\"sentence\":{\"type\":\"string\",\"description\":\"Sentence to tokenize via ;:.\"}"
      "}}";
 
+/* ---------- j.session.restart ---------- */
+
+static json *tool_session_restart(const json *args, void *userdata, const char **err) {
+    (void)userdata;
+    const char *name = req_str(args, "name", err);
+    if (!name) return NULL;
+    session *s = session_lookup(name);
+    if (!s) { *err = "no such session"; return NULL; }
+
+    int sandbox = session_is_sandbox(s);
+    /* We don't preserve profile_path across restarts yet; document and skip. */
+
+    session_terminate(name);
+
+    const char *e = NULL;
+    session *ns = session_create(name, sandbox, NULL, &e);
+    if (!ns) { *err = e ? e : "recreate failed"; return NULL; }
+
+    json *o = json_new_obj();
+    json_obj_set(o, "name",    json_new_str(name));
+    json_obj_set(o, "sandbox", json_new_bool(sandbox));
+    return o;
+}
+
 /* ---------- j.break ---------- */
 
-static json *tool_break(const json *args, const char **err) {
+static json *tool_break(const json *args, void *userdata, const char **err) {
+    (void)userdata;
     const char *name = req_str(args, "name", err);
     if (!name) return NULL;
     session *s = session_lookup(name);
@@ -181,17 +211,19 @@ static json *tool_break(const json *args, const char **err) {
 
 /* ---------- registry ---------- */
 
-static const mcp_tool T_CREATE    = { "j.session.create",    "Create a named J session.",           SCHEMA_CREATE,    tool_session_create };
-static const mcp_tool T_LIST      = { "j.session.list",      "List live J sessions.",               SCHEMA_EMPTY,     tool_session_list };
-static const mcp_tool T_TERMINATE = { "j.session.terminate", "Terminate a J session.",              SCHEMA_NAME_ONLY, tool_session_terminate };
-static const mcp_tool T_EVAL      = { "j.eval",              "Evaluate a J sentence in a session.", SCHEMA_EVAL,      tool_eval };
-static const mcp_tool T_PARSE     = { "j.parse",             "Tokenize a sentence via ;:.",         SCHEMA_PARSE,     tool_parse };
-static const mcp_tool T_BREAK     = { "j.break",             "Interrupt a running sentence.",       SCHEMA_NAME_ONLY, tool_break };
+static const mcp_tool T_CREATE    = { "j.session.create",    "Create a named J session.",                 SCHEMA_CREATE,    tool_session_create };
+static const mcp_tool T_LIST      = { "j.session.list",      "List live J sessions.",                     SCHEMA_EMPTY,     tool_session_list };
+static const mcp_tool T_TERMINATE = { "j.session.terminate", "Terminate a J session.",                    SCHEMA_NAME_ONLY, tool_session_terminate };
+static const mcp_tool T_RESTART   = { "j.session.restart",   "Terminate and recreate a session by name.", SCHEMA_NAME_ONLY, tool_session_restart };
+static const mcp_tool T_EVAL      = { "j.eval",              "Evaluate a J sentence in a session.",       SCHEMA_EVAL,      tool_eval };
+static const mcp_tool T_PARSE     = { "j.parse",             "Tokenize a sentence via ;:.",               SCHEMA_PARSE,     tool_parse };
+static const mcp_tool T_BREAK     = { "j.break",             "Interrupt a running sentence.",             SCHEMA_NAME_ONLY, tool_break };
 
 void tools_j_register(void) {
     mcp_register(&T_CREATE);
     mcp_register(&T_LIST);
     mcp_register(&T_TERMINATE);
+    mcp_register(&T_RESTART);
     mcp_register(&T_EVAL);
     mcp_register(&T_PARSE);
     mcp_register(&T_BREAK);

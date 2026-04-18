@@ -3,6 +3,7 @@
 #include "mcp.h"
 #include "session.h"
 #include "tools_j.h"
+#include "tools_reg.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,6 +42,7 @@ int main(int argc, char **argv) {
     }
 
     tools_j_register();
+    tools_reg_init();
 
     mcp_run();
 

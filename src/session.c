@@ -9,6 +9,9 @@
 #include <string.h>
 #include <time.h>
 
+static session_post_init_cb post_init_cb = NULL;
+void session_set_post_init_cb(session_post_init_cb cb) { post_init_cb = cb; }
+
 static char *dup_n(const char *s, size_t n) {
     char *d = malloc(n + 1);
     if (!d) return NULL;
@@ -104,8 +107,32 @@ static char *j_input_cb(JS jt, char *prompt) {
 
 /* ---------- worker thread ---------- */
 
+typedef struct {
+    session *s;
+    int init_done;          /* set to 1 once jt is assigned (or init failed) */
+    int init_ok;
+    pthread_mutex_t *init_mu;
+    pthread_cond_t  *init_cv;
+} worker_bootstrap;
+
 static void *worker_main(void *arg) {
-    session *s = arg;
+    worker_bootstrap *b = arg;
+    session *s = b->s;
+
+    /* JInit + JSM must happen on the thread that will subsequently call JDo.
+     * J caches thread-local state in JInit that is only valid on the caller
+     * thread. Signal the main thread once init is complete so session_create
+     * can finish and return. */
+    s->jt = jlib_new(j_output_cb, j_wd_cb, j_input_cb, JMCP_SMCON);
+
+    pthread_mutex_lock(b->init_mu);
+    b->init_ok   = s->jt != NULL;
+    b->init_done = 1;
+    pthread_cond_broadcast(b->init_cv);
+    pthread_mutex_unlock(b->init_mu);
+
+    if (!s->jt) return NULL;
+
     for (;;) {
         pthread_mutex_lock(&s->mu);
         while (!s->pending && !s->shutdown)
@@ -163,43 +190,61 @@ session *session_create(const char *name, int sandbox, const char *profile_path,
     pthread_cond_init(&s->cv_new_job, NULL);
     pthread_cond_init(&s->cv_done, NULL);
 
-    s->jt = jlib_new(j_output_cb, j_wd_cb, j_input_cb, JMCP_SMCON);
-    if (!s->jt) { session_free(s); *err = "JInit failed"; return NULL; }
-
-    /* Register BEFORE starting the worker so callbacks can find us. */
+    /* Register BEFORE starting the worker so Joutput callbacks can resolve
+     * the session via the jt the worker will publish. */
     pthread_rwlock_wrlock(&reg_lock);
     registry[registry_n++] = s;
     pthread_rwlock_unlock(&reg_lock);
 
-    if (pthread_create(&s->worker, NULL, worker_main, s) != 0) {
+    pthread_mutex_t init_mu = PTHREAD_MUTEX_INITIALIZER;
+    pthread_cond_t  init_cv = PTHREAD_COND_INITIALIZER;
+    worker_bootstrap b = { .s = s, .init_mu = &init_mu, .init_cv = &init_cv };
+
+    if (pthread_create(&s->worker, NULL, worker_main, &b) != 0) {
         pthread_rwlock_wrlock(&reg_lock);
         if (registry_n && registry[registry_n-1] == s) registry_n--;
         pthread_rwlock_unlock(&reg_lock);
-        jlib_free(s->jt);
         session_free(s);
         *err = "pthread_create failed";
         return NULL;
     }
 
-    /* One-shot synchronous setup: BINPATH, ARGV, optional profile, optional
-     * sandbox. Use the normal worker path so callbacks + output capture are
-     * already in effect. */
-    {
-        char setup[4096];
-        snprintf(setup, sizeof setup,
-                 "(ARGV_z_=:,<'j-mcp')[BINPATH_z_=:'j-mcp'[IFJMCP_z_=:1");
-        eval_result r = {0};
-        const char *e = NULL;
-        session_eval(s, setup, 10000, &r, &e);
-        eval_result_free(&r);
+    pthread_mutex_lock(&init_mu);
+    while (!b.init_done) pthread_cond_wait(&init_cv, &init_mu);
+    pthread_mutex_unlock(&init_mu);
+    if (!b.init_ok) {
+        /* Worker already exited. Join + free. */
+        pthread_join(s->worker, NULL);
+        pthread_rwlock_wrlock(&reg_lock);
+        for (size_t i = 0; i < registry_n; i++)
+            if (registry[i] == s) {
+                for (size_t j = i+1; j < registry_n; j++) registry[j-1] = registry[j];
+                registry_n--; break;
+            }
+        pthread_rwlock_unlock(&reg_lock);
+        session_free(s);
+        *err = "JInit failed";
+        return NULL;
     }
+
     if (profile_path && *profile_path) {
+        /* Define BINPATH and ARGV so profile.ijs has what it expects, then
+         * load the profile — but first do a trivial non-locative eval as a
+         * guard, per the bug above. */
+        const char *pre[] = {
+            "i.0 0",
+            "BINPATH_z_=: 'j-mcp'",
+            "ARGV_z_=: ,<'j-mcp'",
+        };
+        for (size_t i = 0; i < sizeof pre / sizeof pre[0]; i++) {
+            eval_result r = {0}; const char *e = NULL;
+            session_eval(s, pre[i], 10000, &r, &e);
+            eval_result_free(&r);
+        }
         char buf[4096];
-        /* Load profile via `load` — it needs a string. */
         int n = snprintf(buf, sizeof buf, "0!:0 <'%s'", profile_path);
         if (n > 0 && (size_t)n < sizeof buf) {
-            eval_result r = {0};
-            const char *e = NULL;
+            eval_result r = {0}; const char *e = NULL;
             session_eval(s, buf, 20000, &r, &e);
             if (r.ec) jlog("session %s: profile load ec=%d err=%s",
                            name, r.ec, r.stderr_buf ? r.stderr_buf : "");
@@ -215,6 +260,7 @@ session *session_create(const char *name, int sandbox, const char *profile_path,
     }
 
     jlog("session %s created (sandbox=%d)", name, sandbox);
+    if (post_init_cb) post_init_cb(name);
     return s;
 }
 

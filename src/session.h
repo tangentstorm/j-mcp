@@ -52,4 +52,10 @@ void session_break(session *s);
 const char *session_name(const session *s);
 int session_is_sandbox(const session *s);
 
+/* Callback invoked once per successful session_create, after the session is
+ * fully initialised (including sandbox + profile) and before returning to
+ * the caller. The tool registry uses this to replay stored J verbs. */
+typedef void (*session_post_init_cb)(const char *name);
+void session_set_post_init_cb(session_post_init_cb cb);
+
 #endif

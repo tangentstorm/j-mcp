@@ -33,7 +33,8 @@ SRCS := \
   $(SRC_DIR)/log.c  \
   $(SRC_DIR)/mcp.c  \
   $(SRC_DIR)/session.c \
-  $(SRC_DIR)/tools_j.c
+  $(SRC_DIR)/tools_j.c \
+  $(SRC_DIR)/tools_reg.c
 
 OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD)/%.o,$(SRCS))
 DEPS := $(OBJS:.o=.d)

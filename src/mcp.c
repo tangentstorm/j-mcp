@@ -14,22 +14,82 @@
 
 /* ---------- tool registry ---------- */
 
+typedef struct {
+    char *name;
+    char *description;
+    char *input_schema;
+    mcp_tool_fn handler;
+    void *userdata;
+    void (*userdata_free)(void *);
+    int owns_strings;    /* 1 = dynamic, free on unregister */
+} reg_entry;
+
 static pthread_rwlock_t reg_lock = PTHREAD_RWLOCK_INITIALIZER;
-static const mcp_tool **tools = NULL;
+static reg_entry **tools = NULL;
 static size_t tools_n = 0, tools_cap = 0;
 
-void mcp_register(const mcp_tool *t) {
-    pthread_rwlock_wrlock(&reg_lock);
+static void reg_push(reg_entry *e) {
     if (tools_n == tools_cap) {
         tools_cap = tools_cap ? tools_cap * 2 : 8;
         tools = realloc(tools, tools_cap * sizeof *tools);
     }
-    tools[tools_n++] = t;
+    tools[tools_n++] = e;
+}
+
+void mcp_register(const mcp_tool *t) {
+    reg_entry *e = calloc(1, sizeof *e);
+    /* Cast away const: we never free or mutate these literal strings. */
+    e->name         = (char *)t->name;
+    e->description  = (char *)t->description;
+    e->input_schema = (char *)t->input_schema;
+    e->handler      = t->handler;
+    e->owns_strings = 0;
+    pthread_rwlock_wrlock(&reg_lock);
+    reg_push(e);
     pthread_rwlock_unlock(&reg_lock);
 }
 
-static const mcp_tool *find_tool(const char *name) {
-    const mcp_tool *t = NULL;
+void mcp_register_dyn(const char *name, const char *description,
+                      const char *input_schema,
+                      mcp_tool_fn handler,
+                      void *userdata,
+                      void (*userdata_free)(void *)) {
+    reg_entry *e = calloc(1, sizeof *e);
+    e->name          = strdup(name);
+    e->description   = description  ? strdup(description)  : NULL;
+    e->input_schema  = input_schema ? strdup(input_schema) : NULL;
+    e->handler       = handler;
+    e->userdata      = userdata;
+    e->userdata_free = userdata_free;
+    e->owns_strings  = 1;
+    pthread_rwlock_wrlock(&reg_lock);
+    reg_push(e);
+    pthread_rwlock_unlock(&reg_lock);
+}
+
+int mcp_unregister(const char *name) {
+    int removed = 0;
+    pthread_rwlock_wrlock(&reg_lock);
+    for (size_t i = 0; i < tools_n; i++) {
+        if (tools[i]->owns_strings && !strcmp(tools[i]->name, name)) {
+            reg_entry *e = tools[i];
+            for (size_t j = i + 1; j < tools_n; j++) tools[j-1] = tools[j];
+            tools_n--;
+            if (e->userdata_free) e->userdata_free(e->userdata);
+            free(e->name);
+            free(e->description);
+            free(e->input_schema);
+            free(e);
+            removed = 1;
+            break;
+        }
+    }
+    pthread_rwlock_unlock(&reg_lock);
+    return removed;
+}
+
+static reg_entry *find_tool(const char *name) {
+    reg_entry *t = NULL;
     pthread_rwlock_rdlock(&reg_lock);
     for (size_t i = 0; i < tools_n; i++)
         if (!strcmp(tools[i]->name, name)) { t = tools[i]; break; }
@@ -47,7 +107,6 @@ static void send_json(json *msg) {
     json_free(msg);
 }
 
-/* Owns `id` and `result`. */
 static void reply_ok(json *id, json *result) {
     json *m = json_new_obj();
     json_obj_set(m, "jsonrpc", json_new_str("2.0"));
@@ -56,7 +115,6 @@ static void reply_ok(json *id, json *result) {
     send_json(m);
 }
 
-/* Owns `id`. */
 static void reply_err(json *id, int code, const char *msg) {
     json *e = json_new_obj();
     json_obj_set(e, "code", json_new_int(code));
@@ -68,7 +126,6 @@ static void reply_err(json *id, int code, const char *msg) {
     send_json(m);
 }
 
-/* Emit a notification (no id). */
 static void notify(const char *method, json *params) {
     json *m = json_new_obj();
     json_obj_set(m, "jsonrpc", json_new_str("2.0"));
@@ -81,9 +138,6 @@ void mcp_notify_tools_changed(void) {
     notify("notifications/tools/list_changed", NULL);
 }
 
-/* Detach a value from its parent (by deep-copying). Simpler than tracking
- * ownership: when we need to return a field from a request as the response id,
- * we clone it. */
 static json *clone(const json *v) {
     if (!v) return NULL;
     switch (v->t) {
@@ -134,7 +188,7 @@ static json *h_tools_list(const json *params) {
 
     pthread_rwlock_rdlock(&reg_lock);
     for (size_t i = 0; i < tools_n; i++) {
-        const mcp_tool *t = tools[i];
+        reg_entry *t = tools[i];
         json *tj = json_new_obj();
         json_obj_set(tj, "name", json_new_str(t->name));
         if (t->description) json_obj_set(tj, "description", json_new_str(t->description));
@@ -143,7 +197,7 @@ static json *h_tools_list(const json *params) {
             json *schema = json_parse(t->input_schema, strlen(t->input_schema), &err);
             if (schema) json_obj_set(tj, "inputSchema", schema);
             else {
-                jlog("bad static schema for tool %s: %s", t->name, err ? err : "?");
+                jlog("bad schema for tool %s: %s", t->name, err ? err : "?");
                 json_obj_set(tj, "inputSchema", json_new_obj());
             }
         } else {
@@ -164,15 +218,13 @@ static json *h_tools_call(const json *params, const char **err_msg, int *err_cod
     const char *name = json_str(name_v);
     if (!name) { *err_code = -32602; *err_msg = "missing tool name"; return NULL; }
 
-    const mcp_tool *t = find_tool(name);
+    reg_entry *t = find_tool(name);
     if (!t) { *err_code = -32601; *err_msg = "unknown tool"; return NULL; }
 
     const json *args = json_obj_get(params, "arguments");
     const char *terr = NULL;
-    json *tres = t->handler(args, &terr);
+    json *tres = t->handler(args, t->userdata, &terr);
 
-    /* Tool failure → MCP convention is `isError: true` inside the result so the
-     * model can see it, rather than a JSON-RPC error. */
     json *result = json_new_obj();
     json *content = json_new_arr();
     if (!tres) {
@@ -183,9 +235,6 @@ static json *h_tools_call(const json *params, const char **err_msg, int *err_cod
         json_obj_set(result, "content", content);
         json_obj_set(result, "isError", json_new_bool(1));
     } else {
-        /* If the tool returned a JSON object with "content"/"structuredContent",
-         * treat it as a full MCP tool-result payload; otherwise serialise it
-         * as one text block + structured. */
         if (tres->t == JSON_OBJ && json_obj_get(tres, "content")) {
             json_free(result);
             return tres;
@@ -226,7 +275,7 @@ static void dispatch(const json *msg) {
         return;
     }
     if (!strcmp(method, "initialized") || !strcmp(method, "notifications/initialized")) {
-        return; /* notification */
+        return;
     }
     if (!strcmp(method, "ping")) {
         reply_ok(clone(id), json_new_obj());
@@ -253,7 +302,6 @@ static void dispatch(const json *msg) {
         return;
     }
     if (!strcmp(method, "$/cancelRequest")) {
-        /* TODO: route to sessions once broker exists. */
         return;
     }
 
