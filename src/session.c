@@ -9,6 +9,14 @@
 #include <string.h>
 #include <time.h>
 
+static char *dup_n(const char *s, size_t n) {
+    char *d = malloc(n + 1);
+    if (!d) return NULL;
+    if (n) memcpy(d, s, n);
+    d[n] = 0;
+    return d;
+}
+
 /* ---------- session struct ---------- */
 
 struct session {
@@ -320,9 +328,9 @@ int session_eval(session *s, const char *sentence, int timeout_ms,
     }
 
     out->ec = s->last_ec;
-    out->stdout_buf = s->out_len ? strndup(s->out_buf, s->out_len) : strdup("");
+    out->stdout_buf = dup_n(s->out_buf ? s->out_buf : "", s->out_len);
     out->stdout_len = s->out_len;
-    out->stderr_buf = s->err_len ? strndup(s->err_buf, s->err_len) : strdup("");
+    out->stderr_buf = dup_n(s->err_buf ? s->err_buf : "", s->err_len);
     out->stderr_len = s->err_len;
     out->timed_out  = interrupted;
     pthread_mutex_unlock(&s->mu);

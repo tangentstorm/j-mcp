@@ -4,15 +4,18 @@
 #include "session.h"
 #include "tools_j.h"
 
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef _WIN32
+  #include <signal.h>
+#endif
+
 static void usage(const char *prog) {
     fprintf(stderr,
         "usage: %s [--libj <path>]\n"
-        "  --libj <path>   path to libj.so/.dylib/.dll (default: libj.so via linker)\n",
+        "  --libj <path>   path to libj.so/.dylib/.dll (default: search $JHOME, sibling, linker)\n",
         prog);
 }
 
@@ -25,7 +28,9 @@ int main(int argc, char **argv) {
         else { usage(argv[0]); return 2; }
     }
 
+#ifndef _WIN32
     signal(SIGPIPE, SIG_IGN);
+#endif
     io_init();
     jlog("j-mcp starting");
 

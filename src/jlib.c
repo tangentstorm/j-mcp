@@ -1,13 +1,37 @@
 #include "jlib.h"
 #include "log.h"
 
-#include <dlfcn.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
+
+#ifdef _WIN32
+  #define WIN32_LEAN_AND_MEAN
+  #include <windows.h>
+  #define JDLL_NAME "j.dll"
+  static void *dl_open(const char *p) { return (void *)LoadLibraryA(p); }
+  static void *dl_sym(void *h, const char *s) { return (void *)GetProcAddress((HMODULE)h, s); }
+  static const char *dl_err(void) {
+    static char buf[256];
+    DWORD e = GetLastError();
+    FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                   NULL, e, 0, buf, sizeof buf, NULL);
+    return buf;
+  }
+#else
+  #include <dlfcn.h>
+  #include <sys/stat.h>
+  #include <unistd.h>
+  #if defined(__APPLE__)
+    #define JDLL_NAME "libj.dylib"
+  #else
+    #define JDLL_NAME "libj.so"
+  #endif
+  static void *dl_open(const char *p) { return dlopen(p, RTLD_LAZY | RTLD_LOCAL); }
+  static void *dl_sym(void *h, const char *s) { return dlsym(h, s); }
+  static const char *dl_err(void) { const char *e = dlerror(); return e ? e : ""; }
+#endif
 
 typedef JS   (*JInit_t)(void);
 typedef void (*JSM_t)(JS, void **);
@@ -27,7 +51,7 @@ static JFree_t       p_JFree;
 static JGetLocale_t  p_JGetLocale;
 
 static int resolve(const char *name, void **slot, const char **err) {
-    void *sym = dlsym(handle, name);
+    void *sym = dl_sym(handle, name);
     if (!sym) {
         static char buf[256];
         snprintf(buf, sizeof buf, "libj missing symbol: %s", name);
@@ -43,9 +67,9 @@ int jlib_load(const char *libpath, const char **err) {
 
     /* Search order:
      *   1. explicit libpath (from --libj)
-     *   2. $JHOME/libj.so   (J's conventional install-root variable)
+     *   2. $JHOME/<libname>   (J's conventional install-root variable)
      *   3. sibling of our executable (jconsole-style)
-     *   4. bare "libj.so"   (LD_LIBRARY_PATH + system paths)
+     *   4. bare library name   (linker search path / LD_LIBRARY_PATH / PATH)
      */
     const char *candidates[5] = {0};
     int nc = 0;
@@ -55,30 +79,44 @@ int jlib_load(const char *libpath, const char **err) {
 
     const char *jhome = getenv("JHOME");
     if (jhome && *jhome) {
-        snprintf(jhome_buf, sizeof jhome_buf, "%s/libj.so", jhome);
+#ifdef _WIN32
+        snprintf(jhome_buf, sizeof jhome_buf, "%s\\%s", jhome, JDLL_NAME);
+#else
+        snprintf(jhome_buf, sizeof jhome_buf, "%s/%s", jhome, JDLL_NAME);
+#endif
         candidates[nc++] = jhome_buf;
     }
 
+#ifdef _WIN32
+    DWORD en = GetModuleFileNameA(NULL, exe_buf, sizeof exe_buf - 1);
+    if (en > 0 && en < sizeof exe_buf) {
+        exe_buf[en] = 0;
+        char *slash = strrchr(exe_buf, '\\');
+        if (!slash) slash = strrchr(exe_buf, '/');
+        if (slash) { strcpy(slash + 1, JDLL_NAME); candidates[nc++] = exe_buf; }
+    }
+#else
     ssize_t n = readlink("/proc/self/exe", exe_buf, sizeof exe_buf - 1);
     if (n > 0) {
         exe_buf[n] = 0;
         char *slash = strrchr(exe_buf, '/');
-        if (slash) { strcpy(slash + 1, "libj.so"); candidates[nc++] = exe_buf; }
+        if (slash) { strcpy(slash + 1, JDLL_NAME); candidates[nc++] = exe_buf; }
     }
+#endif
 
-    candidates[nc++] = "libj.so";
+    candidates[nc++] = JDLL_NAME;
 
     static char last_err[512];
     last_err[0] = 0;
     for (int i = 0; i < nc; i++) {
-        void *h = dlopen(candidates[i], RTLD_LAZY | RTLD_LOCAL);
+        void *h = dl_open(candidates[i]);
         if (h) {
             handle = h;
             snprintf(loaded_path, sizeof loaded_path, "%s", candidates[i]);
             break;
         }
         snprintf(last_err, sizeof last_err, "dlopen %s failed: %s",
-                 candidates[i], dlerror());
+                 candidates[i], dl_err());
     }
     if (!handle) {
         *err = last_err[0] ? last_err : "dlopen failed";

@@ -41,7 +41,11 @@ bound to a particular session. The body is persisted to
 make
 ```
 
-Produces `build/j-mcp`.
+Produces `build/j-mcp` (or `build/j-mcp.exe` on Windows).
+
+Supported toolchains: native gcc/clang on Linux and macOS, MinGW-w64 on
+Windows (via MSYS2). CI builds all three on every push; tagged releases
+attach the binaries as release assets.
 
 ### Finding libj
 
