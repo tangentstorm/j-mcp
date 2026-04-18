@@ -41,8 +41,18 @@ bound to a particular session. The body is persisted to
 make
 ```
 
-Produces `build/j-mcp`. Requires `libj` discoverable at runtime via
-`LD_LIBRARY_PATH` (or passed via the `--libj` flag).
+Produces `build/j-mcp`.
+
+### Finding libj
+
+The server searches for libj in this order:
+
+1. `--libj <path>` command-line flag
+2. `$JMCP_LIBJ` environment variable
+3. `$JHOME/libj.so` — J's conventional install-root variable, set by most
+   packaged distributions
+4. A `libj.so` sibling of the `j-mcp` binary (jconsole's own discovery rule)
+5. Bare `libj.so` via `LD_LIBRARY_PATH` and the system linker search path
 
 ## Transport
 

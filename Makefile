@@ -11,8 +11,11 @@ SRCS := \
   $(SRC_DIR)/main.c \
   $(SRC_DIR)/io.c   \
   $(SRC_DIR)/json.c \
+  $(SRC_DIR)/jlib.c \
   $(SRC_DIR)/log.c  \
-  $(SRC_DIR)/mcp.c
+  $(SRC_DIR)/mcp.c  \
+  $(SRC_DIR)/session.c \
+  $(SRC_DIR)/tools_j.c
 
 OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD)/%.o,$(SRCS))
 DEPS := $(OBJS:.o=.d)
