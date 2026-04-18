@@ -54,10 +54,12 @@ int jlib_set_m(JS jt, const char *name,
                int64_t *jshape, int64_t *jdata);
 
 /* J noun-type constants (from jsrc/jtype.h). */
-#define JMCP_JB01  1    /* boolean, 1 byte */
-#define JMCP_JLIT  2    /* character (byte), 1 byte */
-#define JMCP_JINT  4    /* int64, 8 bytes */
-#define JMCP_JFL   8    /* double, 8 bytes */
+#define JMCP_JB01  1           /* boolean, 1 byte */
+#define JMCP_JLIT  2           /* character (byte), 1 byte */
+#define JMCP_JINT  4           /* int64, 8 bytes */
+#define JMCP_JFL   8           /* double, 8 bytes */
+#define JMCP_JC2T  (1LL<<17)   /* 2-byte unicode char (UTF-16 code unit) */
+#define JMCP_JC4T  (1LL<<18)   /* 4-byte unicode char (codepoint) */
 
 /* Path to the loaded libj (for diagnostics). NULL before jlib_load. */
 const char *jlib_loaded_path(void);
