@@ -79,6 +79,16 @@ jobs:
       - name: assemble bundle
         run: |
           set -eu
+          # On a v* tag, template the tag into the manifest version so the
+          # install dialog version matches the release. jq is preinstalled
+          # on ubuntu-latest.
+          if [[ "${GITHUB_REF_NAME}" == v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            tmp=$(mktemp)
+            jq --arg v "$VERSION" '.version = $v' manifest.json > "$tmp"
+            mv "$tmp" manifest.json
+            echo "manifest version set to $VERSION from tag $GITHUB_REF_NAME"
+          fi
           mkdir -p pkg/bin/linux pkg/bin/darwin pkg/bin/win32
           cp dist/j-mcp-linux-x86_64        pkg/bin/linux/j-mcp
           cp dist/j-mcp-macos-arm64         pkg/bin/darwin/j-mcp
