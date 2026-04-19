@@ -17,7 +17,12 @@ typedef struct {
     size_t stderr_len;
     char *locale;          /* current locale after the call (strdup'd) */
     int   timed_out;       /* 1 if we had to interrupt due to deadline */
+    int   truncated;       /* 1 if output hit the per-call byte cap */
 } eval_result;
+
+/* Maximum bytes of Joutput captured per eval, across stdout+stderr combined.
+ * Excess is dropped and eval_result.truncated is set. */
+#define SESSION_OUTPUT_CAP (1u << 20)   /* 1 MiB */
 
 void eval_result_free(eval_result *r);
 

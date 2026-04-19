@@ -451,17 +451,17 @@ static const char SCHEMA_NAME_ONLY[] =
 static const char SCHEMA_EMPTY[] = "{\"type\":\"object\",\"properties\":{}}";
 
 static const mcp_tool T_REGISTER =
-    { "j.tool.register",
+    { "j_tool_register",
       "Register a new MCP tool whose implementation is a J verb in a session.",
       SCHEMA_REGISTER,
       NULL };   /* handler patched below */
 
 static const mcp_tool T_UNREGISTER =
-    { "j.tool.unregister", "Drop a previously registered J-defined tool.",
+    { "j_tool_unregister", "Drop a previously registered J-defined tool.",
       SCHEMA_NAME_ONLY, NULL };
 
 static const mcp_tool T_LIST =
-    { "j.tool.list", "List user-registered J-defined tools.",
+    { "j_tool_list", "List user-registered J-defined tools.",
       SCHEMA_EMPTY, NULL };
 
 /* Static wrappers that forward to our user-data-taking handlers. */

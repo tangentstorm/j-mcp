@@ -45,6 +45,7 @@ static json *eval_result_to_json(const eval_result *r) {
                                               r->stderr_len));
     json_obj_set(o, "locale",   json_new_str(r->locale ? r->locale : ""));
     json_obj_set(o, "timedOut", json_new_bool(r->timed_out));
+    json_obj_set(o, "truncated", json_new_bool(r->truncated));
     return o;
 }
 
@@ -402,7 +403,7 @@ static json *tool_get(const json *args, void *userdata, const char **err) {
     const char *tn = type_name(c.type);
     if (!tn) {
         static char buf[96];
-        snprintf(buf, sizeof buf, "unsupported J type %lld; use j.eval instead",
+        snprintf(buf, sizeof buf, "unsupported J type %lld; use j_eval instead",
                  (long long)c.type);
         *err = buf;
         free(c.shape_out); free(c.data_out);
@@ -675,15 +676,18 @@ static json *tool_break(const json *args, void *userdata, const char **err) {
 
 /* ---------- registry ---------- */
 
-static const mcp_tool T_CREATE    = { "j.session.create",    "Create a named J session.",                 SCHEMA_CREATE,    tool_session_create };
-static const mcp_tool T_LIST      = { "j.session.list",      "List live J sessions.",                     SCHEMA_EMPTY,     tool_session_list };
-static const mcp_tool T_TERMINATE = { "j.session.terminate", "Terminate a J session.",                    SCHEMA_NAME_ONLY, tool_session_terminate };
-static const mcp_tool T_RESTART   = { "j.session.restart",   "Terminate and recreate a session by name.", SCHEMA_NAME_ONLY, tool_session_restart };
-static const mcp_tool T_EVAL      = { "j.eval",              "Evaluate a J sentence in a session.",       SCHEMA_EVAL,      tool_eval };
-static const mcp_tool T_PARSE     = { "j.parse",             "Tokenize a sentence via ;:.",               SCHEMA_PARSE,     tool_parse };
-static const mcp_tool T_BREAK     = { "j.break",             "Interrupt a running sentence.",             SCHEMA_NAME_ONLY, tool_break };
-static const mcp_tool T_GET       = { "j.get",               "Read a J noun as a shape+type+data payload. Supports int / char / bool / float only; for other types use j.eval.", SCHEMA_GET, tool_get };
-static const mcp_tool T_SET       = { "j.set",               "Create a J noun from a shape+type+data payload.", SCHEMA_SET, tool_set };
+/* Tool names use underscores (not dots) because Anthropic's client validates
+ * tool names against ^[a-zA-Z0-9_-]{1,64}$ and rejects servers whose tools
+ * don't match. The MCP spec itself is more permissive. */
+static const mcp_tool T_CREATE    = { "j_session_create",    "Create a named J session.",                 SCHEMA_CREATE,    tool_session_create };
+static const mcp_tool T_LIST      = { "j_session_list",      "List live J sessions.",                     SCHEMA_EMPTY,     tool_session_list };
+static const mcp_tool T_TERMINATE = { "j_session_terminate", "Terminate a J session.",                    SCHEMA_NAME_ONLY, tool_session_terminate };
+static const mcp_tool T_RESTART   = { "j_session_restart",   "Terminate and recreate a session by name.", SCHEMA_NAME_ONLY, tool_session_restart };
+static const mcp_tool T_EVAL      = { "j_eval",              "Evaluate a J sentence in a session.",       SCHEMA_EVAL,      tool_eval };
+static const mcp_tool T_PARSE     = { "j_parse",             "Tokenize a sentence via ;:.",               SCHEMA_PARSE,     tool_parse };
+static const mcp_tool T_BREAK     = { "j_break",             "Interrupt a running sentence.",             SCHEMA_NAME_ONLY, tool_break };
+static const mcp_tool T_GET       = { "j_get",               "Read a J noun as a shape+type+data payload. Supports int / char / bool / float only; for other types use j_eval.", SCHEMA_GET, tool_get };
+static const mcp_tool T_SET       = { "j_set",               "Create a J noun from a shape+type+data payload.", SCHEMA_SET, tool_set };
 
 void tools_j_register(void) {
     mcp_register(&T_CREATE);

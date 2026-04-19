@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 
 static session_post_init_cb post_init_cb = NULL;
@@ -43,6 +44,7 @@ struct session {
 
     char *out_buf; size_t out_len, out_cap;
     char *err_buf; size_t err_len, err_cap;
+    int   truncated;  /* 1 if the per-call output cap was hit */
 };
 
 #define MAX_SESSIONS 64
@@ -66,16 +68,24 @@ static session *find_by_jt(JS jt) {
 
 /* ---------- J callbacks ---------- */
 
-static void buf_append(char **b, size_t *n, size_t *cap, const char *s, size_t k) {
+/* Append k bytes of s to the growable buffer, but do not exceed `limit`
+ * total bytes stored. Returns 1 if any bytes were dropped, else 0. */
+static int buf_append(char **b, size_t *n, size_t *cap, const char *s, size_t k,
+                      size_t limit) {
+    int dropped = 0;
+    if (*n >= limit) return 1;
+    if (*n + k > limit) { k = limit - *n; dropped = 1; }
     if (*n + k + 1 > *cap) {
         size_t nc = *cap ? *cap : 256;
         while (nc < *n + k + 1) nc *= 2;
+        if (nc > limit + 1) nc = limit + 1;
         *b = realloc(*b, nc);
         *cap = nc;
     }
-    memcpy(*b + *n, s, k);
+    if (k) memcpy(*b + *n, s, k);
     *n += k;
     (*b)[*n] = 0;
+    return dropped;
 }
 
 static void j_output_cb(JS jt, int type, char *s) {
@@ -85,14 +95,20 @@ static void j_output_cb(JS jt, int type, char *s) {
     size_t k = strlen(s);
 
     pthread_mutex_lock(&sess->mu);
-    if (type == JMCP_MTYOER || type == JMCP_MTYOSYS)
-        buf_append(&sess->err_buf, &sess->err_len, &sess->err_cap, s, k);
-    else if (type == JMCP_MTYOEXIT) {
-        /* Don't concatenate EXIT into text; just log. */
+    /* Share the cap across stdout + stderr so a call can't evade it. */
+    size_t used = sess->out_len + sess->err_len;
+    size_t room = used < SESSION_OUTPUT_CAP ? SESSION_OUTPUT_CAP - used : 0;
+    int dropped = 0;
+    if (type == JMCP_MTYOER || type == JMCP_MTYOSYS) {
+        dropped = buf_append(&sess->err_buf, &sess->err_len, &sess->err_cap,
+                             s, k, sess->err_len + room);
+    } else if (type == JMCP_MTYOEXIT) {
         jlog("session %s: J requested exit (type %d)", sess->name, type);
     } else {
-        buf_append(&sess->out_buf, &sess->out_len, &sess->out_cap, s, k);
+        dropped = buf_append(&sess->out_buf, &sess->out_len, &sess->out_cap,
+                             s, k, sess->out_len + room);
     }
+    if (dropped) sess->truncated = 1;
     pthread_mutex_unlock(&sess->mu);
 }
 
@@ -153,6 +169,7 @@ static void *worker_main(void *arg) {
         s->busy = 1;
         s->out_len = 0;
         s->err_len = 0;
+        s->truncated = 0;
         if (s->out_buf) s->out_buf[0] = 0;
         if (s->err_buf) s->err_buf[0] = 0;
         pthread_mutex_unlock(&s->mu);
@@ -241,27 +258,89 @@ session *session_create(const char *name, int sandbox, const char *profile_path,
         return NULL;
     }
 
-    if (profile_path && *profile_path) {
-        /* Define BINPATH and ARGV so profile.ijs has what it expects, then
-         * load the profile — but first do a trivial non-locative eval as a
-         * guard, per the bug above. */
+    /* Default to loading <libj_dir>/profile.ijs when the caller didn't pass
+     * an explicit path. Without profile, z-locale utilities like `load`,
+     * `require`, `smoutput`, addon paths, etc. are missing and the session
+     * is effectively unusable for anything beyond raw primitives. */
+    char default_profile[4096] = {0};
+    const char *effective_profile = profile_path;
+    if (!effective_profile || !*effective_profile) {
+        const char *libdir = jlib_loaded_dir();
+        if (libdir && *libdir) {
+            char sep = strchr(libdir, '\\') ? '\\' : '/';
+            snprintf(default_profile, sizeof default_profile,
+                     "%s%cprofile.ijs", libdir, sep);
+            struct stat st;
+            if (stat(default_profile, &st) == 0) {
+                effective_profile = default_profile;
+            } else {
+                jlog("session %s: no profile.ijs at %s; skipping profile",
+                     name, default_profile);
+            }
+        }
+    }
+
+    if (effective_profile && *effective_profile) {
+        /* Prime z-locale globals that profile.ijs expects. Run as separate
+         * sentences: chained z-locative assignments in one sentence can
+         * wedge subsequent evals. The `i.0 0` first-eval is a no-op that
+         * warms up the interpreter. */
+#if defined(_WIN32)
+        const char *uname_lit = "'Win'";
+#elif defined(__APPLE__)
+        const char *uname_lit = "'Darwin'";
+#else
+        const char *uname_lit = "'Linux'";
+#endif
+        /* BINPATH = directory of the profile we're loading. J walks up from
+         * BINPATH to find jlibrary's system/ and addons/, so it must be the
+         * profile's own dir. In a packaged J install profile.ijs sits next
+         * to libj, so this equals jlib_loaded_dir(); with an explicit
+         * profile= override the user may point elsewhere. */
+        char binpath[4096];
+        snprintf(binpath, sizeof binpath, "%s", effective_profile);
+        char *slash = strrchr(binpath, '/');
+        char *bslash = strrchr(binpath, '\\');
+        if (bslash && (!slash || bslash > slash)) slash = bslash;
+        if (slash) *slash = 0; else binpath[0] = 0;
+
+        char binpath_sent[4200];
+        char *p = binpath_sent;
+        p += sprintf(p, "BINPATH_z_=: '");
+        for (const char *q = binpath; *q; q++) {
+            if (*q == '\'') *p++ = '\'';
+            *p++ = *q;
+        }
+        sprintf(p, "'");
+
+        char uname_sent[64];
+        snprintf(uname_sent, sizeof uname_sent, "UNAME_z_=: %s", uname_lit);
+
         const char *pre[] = {
             "i.0 0",
-            "BINPATH_z_=: 'j-mcp'",
+            binpath_sent,
             "ARGV_z_=: ,<'j-mcp'",
+            uname_sent,
+            "IFRASPI_z_=: 0",
+            "RUNJSCRIPT_z_=: 0",
+            "FHS_z_=: 0",
+            "IFJMCP_z_=: 1",
         };
         for (size_t i = 0; i < sizeof pre / sizeof pre[0]; i++) {
             eval_result r = {0}; const char *e = NULL;
             session_eval(s, pre[i], 10000, &r, &e);
             eval_result_free(&r);
         }
-        char buf[4096];
-        int n = snprintf(buf, sizeof buf, "0!:0 <'%s'", profile_path);
+
+        char buf[4200];
+        int n = snprintf(buf, sizeof buf, "0!:0 <'%s'", effective_profile);
         if (n > 0 && (size_t)n < sizeof buf) {
             eval_result r = {0}; const char *e = NULL;
-            session_eval(s, buf, 20000, &r, &e);
+            session_eval(s, buf, 30000, &r, &e);
             if (r.ec) jlog("session %s: profile load ec=%d err=%s",
                            name, r.ec, r.stderr_buf ? r.stderr_buf : "");
+            else     jlog("session %s: loaded profile %s",
+                          name, effective_profile);
             eval_result_free(&r);
         }
     }
@@ -344,7 +423,7 @@ void eval_result_free(eval_result *r) {
     free(r->stderr_buf); r->stderr_buf = NULL;
     free(r->locale);     r->locale = NULL;
     r->stdout_len = r->stderr_len = 0;
-    r->ec = 0; r->timed_out = 0;
+    r->ec = 0; r->timed_out = 0; r->truncated = 0;
 }
 
 static void add_ns(struct timespec *ts, long ms) {
@@ -356,11 +435,12 @@ static void add_ns(struct timespec *ts, long ms) {
 int session_eval(session *s, const char *sentence, int timeout_ms,
                  eval_result *out, const char **err) {
     pthread_mutex_lock(&s->mu);
-    if (s->busy || s->pending) {
-        pthread_mutex_unlock(&s->mu);
-        *err = "session busy";
-        return -1;
-    }
+    /* If the session is currently running another job, wait for it to
+     * finish rather than failing. MCP clients routinely send back-to-back
+     * tool calls on the same session; a spurious "busy" error would be a
+     * protocol-level surprise. */
+    while (s->busy || s->pending || s->pending_cb)
+        pthread_cond_wait(&s->cv_done, &s->mu);
     s->pending = strdup(sentence);
     pthread_cond_signal(&s->cv_new_job);
 
@@ -393,6 +473,7 @@ int session_eval(session *s, const char *sentence, int timeout_ms,
     out->stderr_buf = dup_n(s->err_buf ? s->err_buf : "", s->err_len);
     out->stderr_len = s->err_len;
     out->timed_out  = interrupted;
+    out->truncated  = s->truncated;
     pthread_mutex_unlock(&s->mu);
 
     const char *loc = jlib_get_locale(s->jt);

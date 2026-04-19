@@ -50,6 +50,7 @@ typedef int  (*JSetM_t)(JS, const char *, int64_t *, int64_t *, int64_t *, int64
 
 static void *handle = NULL;
 static char  loaded_path[4096];
+static char  loaded_dir[4096];
 
 static JInit_t       p_JInit;
 static JSM_t         p_JSM;
@@ -125,6 +126,12 @@ int jlib_load(const char *libpath, const char **err) {
         if (h) {
             handle = h;
             snprintf(loaded_path, sizeof loaded_path, "%s", candidates[i]);
+            /* Derive the directory by stripping the filename. */
+            snprintf(loaded_dir, sizeof loaded_dir, "%s", loaded_path);
+            char *slash = strrchr(loaded_dir, '/');
+            char *bslash = strrchr(loaded_dir, '\\');
+            if (bslash && (!slash || bslash > slash)) slash = bslash;
+            if (slash) *slash = 0; else loaded_dir[0] = 0;
             break;
         }
         int n = snprintf(last_err + elen, sizeof last_err - elen,
@@ -197,4 +204,8 @@ int jlib_set_m(JS jt, const char *name,
 
 const char *jlib_loaded_path(void) {
     return handle ? loaded_path : NULL;
+}
+
+const char *jlib_loaded_dir(void) {
+    return handle ? loaded_dir : NULL;
 }
