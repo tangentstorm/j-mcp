@@ -674,6 +674,47 @@ static json *tool_break(const json *args, void *userdata, const char **err) {
     return o;
 }
 
+/* ---------- j_show ---------- */
+
+/* Format a noun for human reading. Covers every noun type (including boxed,
+ * extended, rational, sparse, symbol) because it goes through J's own ":
+ * formatter — the same one the REPL uses for auto-display. The round-trip
+ * j_get / j_set path is reserved for dense int/char/bool/float arrays; use
+ * this when you just want to see what's in a variable, especially a boxed
+ * one. For lossless machine round-trip, `j_eval` with `5!:5 <'name'` gives
+ * the linear representation. */
+static json *tool_show(const json *args, void *userdata, const char **err) {
+    (void)userdata;
+    const char *name = req_str(args, "name", err);
+    if (!name) return NULL;
+    const char *var = req_str(args, "var", err);
+    if (!var) return NULL;
+    session *s = session_lookup(name);
+    if (!s) { *err = "no such session"; return NULL; }
+
+    size_t sn = strlen(var) + 8;
+    char *sent = malloc(sn);
+    snprintf(sent, sn, "\": %s", var);
+
+    eval_result r = {0};
+    const char *e = NULL;
+    int rc = session_eval(s, sent, 10000, &r, &e);
+    free(sent);
+    if (rc < 0) { *err = e ? e : "eval failed"; eval_result_free(&r); return NULL; }
+
+    json *out = eval_result_to_json(&r);
+    eval_result_free(&r);
+    return out;
+}
+
+static const char SCHEMA_SHOW[] =
+    "{\"type\":\"object\","
+     "\"required\":[\"name\",\"var\"],"
+     "\"properties\":{"
+       "\"name\":{\"type\":\"string\",\"description\":\"Session name.\"},"
+       "\"var\":{\"type\":\"string\",\"description\":\"J noun name whose formatted display should be returned. Works on any noun type, including boxed.\"}"
+     "}}";
+
 /* ---------- registry ---------- */
 
 /* Tool names use underscores (not dots) because Anthropic's client validates
@@ -686,7 +727,8 @@ static const mcp_tool T_RESTART   = { "j_session_restart",   "Terminate and recr
 static const mcp_tool T_EVAL      = { "j_eval",              "Evaluate a J sentence in a session.",       SCHEMA_EVAL,      tool_eval };
 static const mcp_tool T_PARSE     = { "j_parse",             "Tokenize a sentence via ;:.",               SCHEMA_PARSE,     tool_parse };
 static const mcp_tool T_BREAK     = { "j_break",             "Interrupt a running sentence.",             SCHEMA_NAME_ONLY, tool_break };
-static const mcp_tool T_GET       = { "j_get",               "Read a J noun as a shape+type+data payload. Supports int / char / bool / float only; for other types use j_eval.", SCHEMA_GET, tool_get };
+static const mcp_tool T_SHOW      = { "j_show",              "Return the formatted display of a J noun (the same text you'd see if you typed its name at the REPL). Works on every noun type including boxed, extended, rational, and sparse -- use this when you just want to see what's in a variable. For structured round-trip of flat numeric/char arrays, use j_get.", SCHEMA_SHOW, tool_show };
+static const mcp_tool T_GET       = { "j_get",               "Read a J noun as a shape+type+data payload. Supports int / char / bool / float only; for other types use j_show or j_eval.", SCHEMA_GET, tool_get };
 static const mcp_tool T_SET       = { "j_set",               "Create a J noun from a shape+type+data payload.", SCHEMA_SET, tool_set };
 
 void tools_j_register(void) {
@@ -697,6 +739,7 @@ void tools_j_register(void) {
     mcp_register(&T_EVAL);
     mcp_register(&T_PARSE);
     mcp_register(&T_BREAK);
+    mcp_register(&T_SHOW);
     mcp_register(&T_GET);
     mcp_register(&T_SET);
 }
