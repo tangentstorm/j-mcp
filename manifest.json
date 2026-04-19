@@ -1,0 +1,62 @@
+{
+  "manifest_version": "0.3",
+  "name": "j-mcp",
+  "display_name": "J Programming Language",
+  "version": "0.1.0",
+  "description": "Embed the J array programming language as MCP tools — named sessions, evaluate sentences, tokenize, interrupt, and even register new MCP tools whose body is a J verb.",
+  "long_description": "Spawns and manages J interpreter sessions via libj. The client can create independent named sessions, evaluate sentences, read and write dense arrays (int/char/bool/float, incl. UTF-16 and UTF-32 chars), tokenize, and interrupt a running sentence. An LLM can also register its own MCP tools whose implementation is a J verb — those tools are persisted to disk and replayed into their backing session on reconnect.",
+  "author": {
+    "name": "tangentstorm"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tangentstorm/j-mcp"
+  },
+  "homepage": "https://github.com/tangentstorm/j-mcp",
+  "documentation": "https://github.com/tangentstorm/j-mcp#readme",
+  "license": "MIT",
+  "keywords": ["j", "apl", "array", "programming-language", "repl"],
+  "compatibility": {
+    "platforms": ["linux", "darwin", "win32"]
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/linux/j-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/bin/linux/j-mcp",
+      "env": {
+        "JHOME": "${user_config.jhome}"
+      },
+      "platform_overrides": {
+        "darwin": {
+          "command": "${__dirname}/bin/darwin/j-mcp"
+        },
+        "win32": {
+          "command": "${__dirname}/bin/win32/j-mcp.exe"
+        }
+      }
+    }
+  },
+  "user_config": {
+    "jhome": {
+      "type": "directory",
+      "title": "J install directory",
+      "description": "Path to the directory that contains libj (libj.so / libj.dylib / j.dll) and profile.ijs — typically your J install's bin folder (e.g. C:\\Program Files\\J9.6\\bin on Windows, /Applications/J9.6/bin on macOS, /usr/lib/j9 or ~/j/bin on Linux).",
+      "required": true
+    }
+  },
+  "tools": [
+    { "name": "j_session_create",    "description": "Create a named J session." },
+    { "name": "j_session_list",      "description": "List live J sessions." },
+    { "name": "j_session_terminate", "description": "Terminate a J session." },
+    { "name": "j_session_restart",   "description": "Terminate and recreate a session by name." },
+    { "name": "j_eval",              "description": "Evaluate a J sentence in a session." },
+    { "name": "j_parse",             "description": "Tokenize a sentence via J's ;: primitive." },
+    { "name": "j_break",             "description": "Interrupt a running sentence." },
+    { "name": "j_get",               "description": "Read a J noun as a shape+type+data payload (int/char/bool/float)." },
+    { "name": "j_set",               "description": "Create a J noun from a shape+type+data payload." },
+    { "name": "j_tool_register",     "description": "Register a new MCP tool whose implementation is a J verb." },
+    { "name": "j_tool_unregister",   "description": "Drop a previously registered J-defined tool." },
+    { "name": "j_tool_list",         "description": "List user-registered J-defined tools." }
+  ]
+}
