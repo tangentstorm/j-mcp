@@ -428,24 +428,71 @@ static void eb_puts(EB *e, const char *s, size_t n) {
     e->n += n;
 }
 
+/* Return the length (1..4) of a valid UTF-8 sequence starting at s[0..n-1],
+ * or 0 if the bytes there are not a valid sequence. Enforces the overlong
+ * and surrogate restrictions from RFC 3629. */
+static int utf8_valid_seq(const unsigned char *s, size_t n) {
+    if (!n) return 0;
+    unsigned char c = s[0];
+    if (c < 0x80) return 1;
+    if (c < 0xC2) return 0;                                 /* lone continuation or overlong 2-byte */
+    if (c < 0xE0) {
+        if (n < 2) return 0;
+        if ((s[1] & 0xC0) != 0x80) return 0;
+        return 2;
+    }
+    if (c < 0xF0) {
+        if (n < 3) return 0;
+        if ((s[1] & 0xC0) != 0x80 || (s[2] & 0xC0) != 0x80) return 0;
+        if (c == 0xE0 && s[1] < 0xA0) return 0;             /* overlong */
+        if (c == 0xED && s[1] >= 0xA0) return 0;            /* surrogate */
+        return 3;
+    }
+    if (c < 0xF5) {
+        if (n < 4) return 0;
+        if ((s[1] & 0xC0) != 0x80 || (s[2] & 0xC0) != 0x80 || (s[3] & 0xC0) != 0x80) return 0;
+        if (c == 0xF0 && s[1] < 0x90) return 0;             /* overlong */
+        if (c == 0xF4 && s[1] >= 0x90) return 0;            /* > U+10FFFF */
+        return 4;
+    }
+    return 0;
+}
+
+/* JSON strings must be valid UTF-8 per RFC 8259. J's output (1!:2, smoutput,
+ * auto-display) emits raw bytes that are frequently Latin-1 or otherwise
+ * non-UTF-8 (e.g. `a.`, J's 256-byte alphabet). Pass through valid UTF-8
+ * sequences unchanged; escape stray bytes >=0x80 as \u00XX so the receiver
+ * sees a well-formed, losslessly-reinterpreted Latin-1 codepoint. */
 static void eb_str(EB *e, const char *s, size_t n) {
     eb_putc(e, '"');
-    for (size_t i = 0; i < n; i++) {
+    size_t i = 0;
+    while (i < n) {
         unsigned char c = (unsigned char)s[i];
         switch (c) {
-        case '"':  eb_puts(e, "\\\"", 2); break;
-        case '\\': eb_puts(e, "\\\\", 2); break;
-        case '\b': eb_puts(e, "\\b",  2); break;
-        case '\f': eb_puts(e, "\\f",  2); break;
-        case '\n': eb_puts(e, "\\n",  2); break;
-        case '\r': eb_puts(e, "\\r",  2); break;
-        case '\t': eb_puts(e, "\\t",  2); break;
-        default:
-            if (c < 0x20) {
+        case '"':  eb_puts(e, "\\\"", 2); i++; continue;
+        case '\\': eb_puts(e, "\\\\", 2); i++; continue;
+        case '\b': eb_puts(e, "\\b",  2); i++; continue;
+        case '\f': eb_puts(e, "\\f",  2); i++; continue;
+        case '\n': eb_puts(e, "\\n",  2); i++; continue;
+        case '\r': eb_puts(e, "\\r",  2); i++; continue;
+        case '\t': eb_puts(e, "\\t",  2); i++; continue;
+        }
+        if (c < 0x20) {
+            char buf[8]; int m = snprintf(buf, sizeof buf, "\\u%04x", c);
+            eb_puts(e, buf, (size_t)m);
+            i++;
+        } else if (c < 0x80) {
+            eb_putc(e, (char)c);
+            i++;
+        } else {
+            int k = utf8_valid_seq((const unsigned char *)s + i, n - i);
+            if (k > 0) {
+                eb_puts(e, s + i, (size_t)k);
+                i += (size_t)k;
+            } else {
                 char buf[8]; int m = snprintf(buf, sizeof buf, "\\u%04x", c);
                 eb_puts(e, buf, (size_t)m);
-            } else {
-                eb_putc(e, (char)c);
+                i++;
             }
         }
     }
