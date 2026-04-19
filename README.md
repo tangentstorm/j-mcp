@@ -35,6 +35,33 @@ bound to a particular session. The body is persisted to
 `$XDG_STATE_HOME/j-mcp/tools.json` and replayed into the session when it is
 (re)created.
 
+## Install
+
+### Claude Desktop one-click
+
+Grab `j-mcp.mcpb` (or `j-mcp.dxt` — same file, different extension for
+compatibility with older Claude Desktop builds) from the latest
+[release](https://github.com/tangentstorm/j-mcp/releases), double-click it,
+and Claude Desktop will prompt you for your J install directory — the one
+that contains `j.dll` / `libj.so` / `libj.dylib` and `profile.ijs`. That's
+the whole install.
+
+### Hand-wired (any MCP client)
+
+For Claude Desktop without the bundle, or any other MCP client, drop this
+in `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "j": {
+      "command": "/path/to/j-mcp",
+      "env": { "JHOME": "/path/to/j-install/bin" }
+    }
+  }
+}
+```
+
 ## Build
 
 ```
@@ -45,7 +72,7 @@ Produces `build/j-mcp` (or `build/j-mcp.exe` on Windows).
 
 Supported toolchains: native gcc/clang on Linux and macOS, MinGW-w64 on
 Windows (via MSYS2). CI builds all three on every push; tagged releases
-attach the binaries as release assets.
+attach the binaries and the `.mcpb` / `.dxt` bundle as release assets.
 
 ### Finding libj
 
@@ -59,9 +86,10 @@ The server searches for libj in this order:
 
 ## Transport
 
-MCP over stdio (LSP-style `Content-Length` framing). Logs go to stderr as
-JSONL. SIGINT is **not** trapped — it terminates the server; breaking a running
-J sentence uses the `j_break` tool or MCP's `$/cancelRequest`.
+MCP over stdio with newline-delimited JSON-RPC framing (one message per
+line, no embedded newlines). Logs go to stderr as JSONL. SIGINT is **not**
+trapped — it terminates the server; breaking a running J sentence uses the
+`j_break` tool or MCP's `$/cancelRequest`.
 
 ## Sandbox
 

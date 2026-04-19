@@ -63,8 +63,42 @@ jobs:
           name: j-mcp-windows-x86_64
           path: build/j-mcp-windows-x86_64.exe
 
-  release:
+  # Assemble the DXT/MCPB bundle (.mcpb file, also emitted as .dxt for
+  # backwards compatibility with older Claude Desktop releases). Runs on
+  # every PR so the packaging itself is always proved green; only uploaded
+  # to a GitHub release when a v* tag is pushed.
+  bundle:
     needs: [linux, macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: assemble bundle
+        run: |
+          set -eu
+          mkdir -p pkg/bin/linux pkg/bin/darwin pkg/bin/win32
+          cp dist/j-mcp-linux-x86_64        pkg/bin/linux/j-mcp
+          cp dist/j-mcp-macos-arm64         pkg/bin/darwin/j-mcp
+          cp dist/j-mcp-windows-x86_64.exe  pkg/bin/win32/j-mcp.exe
+          chmod +x pkg/bin/linux/j-mcp pkg/bin/darwin/j-mcp
+          cp manifest.json pkg/manifest.json
+          cp README.md     pkg/README.md
+          cp LICENSE       pkg/LICENSE
+          (cd pkg && zip -qr ../j-mcp.mcpb .)
+          cp j-mcp.mcpb j-mcp.dxt
+          ls -la j-mcp.mcpb j-mcp.dxt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: j-mcp-bundle
+          path: |
+            j-mcp.mcpb
+            j-mcp.dxt
+
+  release:
+    needs: [bundle]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
