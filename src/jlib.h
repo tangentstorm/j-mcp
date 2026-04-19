@@ -64,4 +64,8 @@ int jlib_set_m(JS jt, const char *name,
 /* Path to the loaded libj (for diagnostics). NULL before jlib_load. */
 const char *jlib_loaded_path(void);
 
+/* Directory containing the loaded libj (no trailing slash). NULL before
+ * jlib_load. Used to locate profile.ijs and other sibling resources. */
+const char *jlib_loaded_dir(void);
+
 #endif

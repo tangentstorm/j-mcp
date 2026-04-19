@@ -16,17 +16,17 @@ Phase 1 (MVP). See `PLAN.md` (internal) for the roadmap.
 
 | Tool | Purpose |
 |---|---|
-| `j.session.create` | Spawn a named J session (`sandbox: bool`). |
-| `j.session.list` | Enumerate live sessions. |
-| `j.session.terminate` | Destroy a named session. |
-| `j.session.restart` | Terminate + recreate with same options. |
-| `j.eval` | Evaluate a J sentence; structured result + captured output. |
-| `j.parse` | Tokenize a sentence via `;:` and return the word list. |
-| `j.break` | Interrupt a running sentence (non-blocking; uses `JInterrupt`). |
-| `j.get` / `j.set` | Exchange dense numeric/char arrays via `JGetM`/`JSetM`. |
-| `j.tool.register` | Register a new MCP tool whose body is a J verb. |
-| `j.tool.unregister` | Drop a registered tool. |
-| `j.tool.list` | Show registered J-defined tools. |
+| `j_session_create` | Spawn a named J session (`sandbox: bool`). |
+| `j_session_list` | Enumerate live sessions. |
+| `j_session_terminate` | Destroy a named session. |
+| `j_session_restart` | Terminate + recreate with same options. |
+| `j_eval` | Evaluate a J sentence; structured result + captured output. |
+| `j_parse` | Tokenize a sentence via `;:` and return the word list. |
+| `j_break` | Interrupt a running sentence (non-blocking; uses `JInterrupt`). |
+| `j_get` / `j_set` | Exchange dense numeric/char arrays via `JGetM`/`JSetM`. |
+| `j_tool_register` | Register a new MCP tool whose body is a J verb. |
+| `j_tool_unregister` | Drop a registered tool. |
+| `j_tool_list` | Show registered J-defined tools. |
 
 ### Registered J-defined tools
 
@@ -61,7 +61,7 @@ The server searches for libj in this order:
 
 MCP over stdio (LSP-style `Content-Length` framing). Logs go to stderr as
 JSONL. SIGINT is **not** trapped — it terminates the server; breaking a running
-J sentence uses the `j.break` tool or MCP's `$/cancelRequest`.
+J sentence uses the `j_break` tool or MCP's `$/cancelRequest`.
 
 ## Sandbox
 
