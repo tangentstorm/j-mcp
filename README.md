@@ -8,11 +8,7 @@ Written in **C11** with no dependencies beyond libc, pthreads, and libdl.
 Intended to be contributable upstream into
 [jsource](https://github.com/jsoftware/jsource) once the surface stabilises.
 
-## Status
-
-Phase 1 (MVP). See `PLAN.md` (internal) for the roadmap.
-
-## Tools (phase 1)
+## Provided Tools
 
 | Tool | Purpose |
 |---|---|
@@ -37,19 +33,14 @@ bound to a particular session. The body is persisted to
 
 ## Install
 
-### Claude Desktop one-click
+`j-mcp` works with any MCP-compatible client. Quickstart guides:
 
-Grab `j-mcp.mcpb` (or `j-mcp.dxt` — same file, different extension for
-compatibility with older Claude Desktop builds) from the latest
-[release](https://github.com/tangentstorm/j-mcp/releases), double-click it,
-and Claude Desktop will prompt you for your J install directory — the one
-that contains `j.dll` / `libj.so` / `libj.dylib` and `profile.ijs`. That's
-the whole install.
+- **Claude Desktop** — [Getting Started with Local MCP Servers](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)  (you'll probably want to dowload the `.mcpb` file from the latest release)
+- **Claude Code** — [MCP guide](https://code.claude.com/docs/en/mcp)
+- **OpenAI Codex** — [MCP guide](https://developers.openai.com/codex/mcp)
+- **Grok Build** — appears to use the same configuration syntax as Claude Code
 
-### Hand-wired (any MCP client)
-
-For Claude Desktop without the bundle, or any other MCP client, drop this
-in `claude_desktop_config.json`:
+For manual configuration in claude code, put this in your `~/.claude.json` file, inside one of the configured projects. (Projects appear whenever you run `claude` in a directory.)
 
 ```json
 {
