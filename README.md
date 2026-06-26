@@ -10,7 +10,8 @@ Intended to be contributable upstream into
 
 ## Demo video
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/l0lJxHoII-M?si=UimNEzOnmGiBs_Av" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+[<img width="640" height="360" alt="image" src="https://github.com/user-attachments/assets/7fceda2b-fe5b-47d2-a45a-4e3d627ffcc3" />](https://www.youtube.com/watch?v=l0lJxHoII-M)
+
 
 ## Provided Tools
 
