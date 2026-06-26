@@ -8,11 +8,7 @@ Written in **C11** with no dependencies beyond libc, pthreads, and libdl.
 Intended to be contributable upstream into
 [jsource](https://github.com/jsoftware/jsource) once the surface stabilises.
 
-## Status
-
-Phase 1 (MVP). See `PLAN.md` (internal) for the roadmap.
-
-## Tools (phase 1)
+## Tools
 
 | Tool | Purpose |
 |---|---|
@@ -56,6 +52,15 @@ The server searches for libj in this order:
    packaged distributions
 3. A `libj.so` sibling of the `j-mcp` binary (jconsole's own discovery rule)
 4. Bare `libj.so` via `LD_LIBRARY_PATH` and the system linker search path
+
+## Usage with AI coding assistants
+
+`j-mcp` works with any MCP-compatible client. Quickstart guides:
+
+- **Claude Desktop** — [Getting Started with Local MCP Servers](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)
+- **Claude Code** — [MCP guide](https://code.claude.com/docs/en/mcp)
+- **OpenAI Codex** — [MCP guide](https://developers.openai.com/codex/mcp)
+- **Grok Build** — appears to use the same configuration syntax as Claude
 
 ## Transport
 
