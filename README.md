@@ -29,12 +29,56 @@ Intended to be contributable upstream into
 | `j_tool_unregister` | Drop a registered tool. |
 | `j_tool_list` | Show registered J-defined tools. |
 
-### Registered J-defined tools
+## Registering your own tool
 
-An LLM (or human) can register new MCP tools whose implementation is a J verb
-bound to a particular session. The body is persisted to
-`$XDG_STATE_HOME/j-mcp/tools.json` and replayed into the session when it is
-(re)created.
+Registration is active: call `j_tool_register`; loading a file or defining
+metadata alone does not register a tool.
+
+- Create the backing session with `j_session_create` first.
+- `body` must be **one J sentence** that defines exactly `mcp_<name>_z_`
+  as a monadic verb. For longer implementations, use `load '/absolute/path/tool.ijs'`.
+  Helpers are fine; the entry-point name must match the registered tool name.
+- The verb receives the **raw JSON string** in `y` and should return JSON text.
+  In the loaded script, parse and encode with `convert/json`:
+
+  ```j
+  require 'convert/json'
+  mcp_echo_z_=: 3 : 0
+    obj=. dec_json_json_ y
+    enc_json_json_ obj
+  )
+  ```
+
+- `inputSchema` must be a JSON **object**, not a JSON-encoded string.
+  Omission defaults to `{"type":"object"}`.
+- `j_tool_register` uses `name` for the tool and `session` for its session.
+  `j_eval` accepts `name` or the alias `session` for its session;
+  `name` takes precedence when both are present.
+- Registrations persist at `$XDG_STATE_HOME/j-mcp/tools.json` (default
+  `~/.local/state/j-mcp/tools.json`; Windows: `%APPDATA%\j-mcp\tools.json`).
+  Bodies replay on session (re)creation. After a server restart, recreate the
+  session before calling its saved tools.
+
+For a name mismatch, check `4!:0 <'mcp_echo_z_'` in the backing session:
+`3` means verb. See the [complete tutorial](docs/tutorial-registering-a-tool.md)
+for registration, listing, calls, replay and troubleshooting.
+
+### Bundled lint tool
+
+[tools/j_lint.ijs](tools/j_lint.ijs), contributed by **Tom McGuire
+(@tmcguirefl)**, exposes `j_lint` for checking J files or inline source.
+Only the adapter is vendored. Obtain its `report.ijs` dependency from
+[tmcguirefl/jlinter](https://github.com/tmcguirefl/jlinter) and install
+Henry Rich's `debug/lint` and J's `convert/json` addons separately.
+Install jlinter at `~addons/tmcguire/jlinter`, or place the adapter beside
+the external `report.ijs`.
+
+Create session `jlinter`, then call `j_tool_register` with `name: "j_lint"`,
+`session: "jlinter"`, and `body: "load '/absolute/path/to/j-mcp/tools/j_lint.ijs'"`.
+Pass [Tom's inputSchema object from the tutorial](docs/tutorial-registering-a-tool.md#create--register--list--call);
+do not pass the string noun `mcp_j_lint_schema_z_` without decoding it.
+Then list tools and call `j_lint` with `path` or `source`, plus optional
+`format` (`json`, `markdown`, or `text`).
 
 ## Install
 
@@ -70,6 +114,19 @@ Supported toolchains: native gcc/clang on Linux and macOS, MinGW-w64 on
 Windows (via MSYS2). CI builds all three on every push; tagged releases
 attach the binaries and the `.mcpb` / `.dxt` bundle as release assets.
 
+### Minimum J version
+
+**J 9.8 beta is required** (tested with **9.8.0-beta7**). Stock J through
+9.03 does not export `JInterrupt`; the server hard-fails at startup with
+`libj missing symbol: JInterrupt`. Use a full J installation with its profile
+and addons. For example:
+
+```sh
+JHOME=/absolute/path/to/j9.8/bin build/j-mcp
+# or:
+build/j-mcp --libj /absolute/path/to/j9.8/bin/libj.so
+```
+
 ### Finding libj
 
 The server searches for libj in this order:
@@ -79,6 +136,20 @@ The server searches for libj in this order:
    packaged distributions
 3. A `libj.so` sibling of the `j-mcp` binary (jconsole's own discovery rule)
 4. Bare `libj.so` via `LD_LIBRARY_PATH` and the system linker search path
+
+### Integration tests
+
+Build first, then run the stdio regression suite with Python 3 and J 9.8 beta:
+
+```sh
+JHOME=/absolute/path/to/j9.8/bin \
+JLINTER_DIR=/absolute/path/to/jlinter \
+python3 -m unittest discover -s tests -v
+```
+
+`JLINTER_DIR` points to an external jlinter checkout with `report.ijs` and
+fixtures. Without it, the lint test is skipped. Tests use temporary registry
+directories and do not change your saved tools.
 
 ## Transport
 

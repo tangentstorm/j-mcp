@@ -110,7 +110,8 @@ static const char SCHEMA_NAME_ONLY[] =
 
 static json *tool_eval(const json *args, void *userdata, const char **err) {
     (void)userdata;
-    const char *name = req_str(args, "name", err);
+    const char *name = json_obj_get(args, "name")
+        ? req_str(args, "name", err) : req_str(args, "session", err);
     if (!name) return NULL;
     const char *sentence = req_str(args, "sentence", err);
     if (!sentence) return NULL;
@@ -131,9 +132,11 @@ static json *tool_eval(const json *args, void *userdata, const char **err) {
 
 static const char SCHEMA_EVAL[] =
     "{\"type\":\"object\","
-     "\"required\":[\"name\",\"sentence\"],"
+     "\"required\":[\"sentence\"],"
+     "\"anyOf\":[{\"required\":[\"name\"]},{\"required\":[\"session\"]}],"
      "\"properties\":{"
-       "\"name\":{\"type\":\"string\"},"
+       "\"name\":{\"type\":\"string\",\"description\":\"Session name; takes precedence over session.\"},"
+       "\"session\":{\"type\":\"string\",\"description\":\"Alias for name.\"},"
        "\"sentence\":{\"type\":\"string\",\"description\":\"A J sentence to evaluate.\"},"
        "\"timeoutMs\":{\"type\":\"integer\",\"description\":\"Deadline after which the sentence is interrupted. 0 or missing = no limit.\"}"
      "}}";

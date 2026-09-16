@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "j-mcp",
   "display_name": "J Programming Language",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Embed the J array programming language as MCP tools — named sessions, evaluate sentences, tokenize, interrupt, and even register new MCP tools whose body is a J verb.",
   "long_description": "Spawns and manages J interpreter sessions via libj. The client can create independent named sessions, evaluate sentences, read and write dense arrays (int/char/bool/float, incl. UTF-16 and UTF-32 chars), tokenize, and interrupt a running sentence. An LLM can also register its own MCP tools whose implementation is a J verb — those tools are persisted to disk and replayed into their backing session on reconnect.",
   "author": {
@@ -41,7 +41,7 @@
     "jhome": {
       "type": "directory",
       "title": "J install directory",
-      "description": "Path to the directory that contains libj (libj.so / libj.dylib / j.dll) and profile.ijs — typically your J install's bin folder (e.g. C:\\Program Files\\J9.6\\bin on Windows, /Applications/J9.6/bin on macOS, /usr/lib/j9 or ~/j/bin on Linux).",
+      "description": "Requires J 9.8 beta (tested with beta7). Path to the directory that contains libj (libj.so / libj.dylib / j.dll) and profile.ijs — typically your J install's bin folder (e.g. C:\\Program Files\\J9.8\\bin on Windows, /Applications/J9.8/bin on macOS, /usr/lib/j9 or ~/j/bin on Linux).",
       "required": true
     }
   },

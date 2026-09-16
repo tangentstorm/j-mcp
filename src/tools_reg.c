@@ -92,7 +92,9 @@ static int install_verb(const char *session_name, const char *name,
     int is_verb = (rc == 0 && !r.ec && r.stdout_buf && r.stdout_buf[0] == '3');
     eval_result_free(&r);
     if (!is_verb) {
-        snprintf(errbuf, errcap, "body did not define mcp_%s_z_ as a verb", name);
+        snprintf(errbuf, errcap, "body did not define mcp_%s_z_ as a verb; body must define exactly "
+                 "mcp_<name>_z_ as a monadic verb. Check with 4!:0 <'mcp_%s_z_' "
+                 "(expected 3)", name, name);
         return -1;
     }
     return 0;
@@ -284,6 +286,10 @@ static void load_from_disk(void) {
         const char *desc  = json_str(json_obj_get(o, "description"));
         const json *sch   = json_obj_get(o, "inputSchema");
         if (!name || !sess || !body) continue;
+        if (sch && sch->t != JSON_OBJ) {
+            jlog("tool registry: skipping %s: inputSchema must be a JSON object", name);
+            continue;
+        }
 
         jtool *t = calloc(1, sizeof *t);
         t->name    = strdup(name);
@@ -345,6 +351,11 @@ static json *h_tool_register(const json *args, void *ud, const char **err) {
     if (!valid_name(name))   { *err = "invalid name (must match [a-zA-Z][a-zA-Z0-9_]{0,63})"; return NULL; }
     if (!sess || !*sess)     { *err = "missing session";   return NULL; }
     if (!body || !*body)     { *err = "missing body";      return NULL; }
+
+    if (sch && sch->t != JSON_OBJ) {
+        *err = "inputSchema must be a JSON object";
+        return NULL;
+    }
 
     pthread_mutex_lock(&mu);
     if (jtool_find(name)) {
@@ -441,7 +452,7 @@ static const char SCHEMA_REGISTER[] =
        "\"description\":{\"type\":\"string\",\"description\":\"Human-readable description shown to clients.\"},"
        "\"inputSchema\":{\"type\":\"object\",\"description\":\"JSON Schema for the tool's arguments.\"},"
        "\"session\":{\"type\":\"string\",\"description\":\"Name of an existing J session that owns the verb.\"},"
-       "\"body\":{\"type\":\"string\",\"description\":\"J source that defines a monadic verb named mcp_<name>_z_. The verb receives a JSON string and should return a JSON string.\"}"
+       "\"body\":{\"type\":\"string\",\"description\":\"One J sentence that defines a monadic verb named mcp_<name>_z_. The verb receives a JSON string and should return a JSON string.\"}"
      "}}";
 
 static const char SCHEMA_NAME_ONLY[] =
