@@ -97,6 +97,7 @@ jobs:
           cp manifest.json pkg/manifest.json
           cp README.md     pkg/README.md
           cp LICENSE       pkg/LICENSE
+          cp -R tools docs pkg/
           (cd pkg && zip -qr ../j-mcp.mcpb .)
           cp j-mcp.mcpb j-mcp.dxt
           ls -la j-mcp.mcpb j-mcp.dxt
